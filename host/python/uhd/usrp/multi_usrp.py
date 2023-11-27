@@ -183,16 +183,30 @@ class MultiUSRP(lib.usrp.multi_usrp):
         metadata = lib.types.tx_metadata()
         if start_time is not None:
             metadata.time_spec = start_time
+            #print (metadata.time_spec.get_real_secs)
+            metadata.has_time_spec = True
         while send_samps < max_samps:
             real_samps = min(proto_len, max_samps-send_samps)
             if real_samps < proto_len:
+                #print(waveform_proto[:, :real_samps])
                 samples = streamer.send(waveform_proto[:, :real_samps], metadata)
             else:
                 samples = streamer.send(waveform_proto, metadata)
             send_samps += samples
         # Send EOB to terminate Tx
+        
+
         metadata.end_of_burst = True
+        metadata.has_time_spec = False
         streamer.send(np.zeros((len(channels), 1), dtype=np.complex64), metadata)
+        while 1:
+            async_meta = lib.types.async_metadata()
+            streamer.recv_async_msg(async_meta)
+            if async_meta.event_code == lib.types.tx_metadata_event_code.burst_ack:
+                tx_time = async_meta.time_spec.get_real_secs() - duration
+                print (f"TX time:{async_meta.event_code} {tx_time}")
+                break
+
         # Help the garbage collection
         streamer = None
-        return send_samps
+        return send_samps, tx_time
